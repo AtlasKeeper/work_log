@@ -30,4 +30,12 @@ Before the first sign-in:
 
 The `Back up cloud work logs` GitHub Action exports portable JSON snapshots every six hours. Supabase remains the sync layer—not the only copy of the data.
 
+Sync checks every 15 seconds when the page is visible and you are not editing text. Offline changes stay local until reconnecting. If both devices change their copies independently, sync pauses instead of overwriting either copy; export the local copy before resolving the conflict.
+
+Existing tasks entered through a local file URL require a one-time Export from that page and Import into the hosted app before first sign-in. Browsers isolate local-file storage from website storage. Thereafter use the hosted URL on both devices with the same email.
+
+Cloud rows and GitHub backups are publicly readable by design. Do not enter confidential information. Browser storage is not a permanent backup; keep downloaded exports too. Scheduled backups can be delayed or disabled by GitHub.
+
+Backup files contain an array of account snapshots. To restore through the app's Import button, extract the desired account's `data` object into a JSON file.
+
 The original September 15, 2026 entries are preloaded as completed tasks. The original `work log` text file is kept unchanged as a source record.

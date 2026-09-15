@@ -1,4 +1,4 @@
-const CACHE = 'daily-work-log-v3';
+const CACHE = 'daily-work-log-v4';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
@@ -13,9 +13,10 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(fetch(event.request).then(response => {
     const copy = response.clone();
-    caches.open(CACHE).then(cache => cache.put(event.request, copy));
+    if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, copy));
     return response;
   }).catch(() => caches.match(event.request).then(response => response || caches.match('./index.html'))));
 });

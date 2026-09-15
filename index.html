@@ -224,25 +224,57 @@
       setSyncStatus(session ? 'Connected and up to date' : 'Stored on this device only', Boolean(session));
     }
     async function pushCloud() {
-      if (!cloudSession || !navigator.onLine) return setSyncStatus('Offline · will sync when connected');
-      setSyncStatus('Syncing…', true);
-      const updatedAt = new Date().toISOString();
-      const { error } = await cloud.from('work_log_snapshots').upsert({ user_id: cloudSession.user.id, data, updated_at: updatedAt });
-      if (error) return setSyncStatus(`Sync needs setup: ${error.message}`);
-      lastCloudUpdate = updatedAt;
-      setSyncStatus('Connected and up to date', true);
+      return pullCloud();
     }
+    let syncBusy = false;
     async function pullCloud(firstLoad = false) {
-      if (!cloudSession || !navigator.onLine) return;
-      const { data: row, error } = await cloud.from('work_log_snapshots').select('data,updated_at').eq('user_id', cloudSession.user.id).maybeSingle();
-      if (error) return setSyncStatus(`Sync needs setup: ${error.message}`);
-      if (!row) return pushCloud();
-      if (firstLoad || !lastCloudUpdate || row.updated_at > lastCloudUpdate) {
-        data = row.data || {};
-        lastCloudUpdate = row.updated_at;
-        save(false); render();
-      }
-      setSyncStatus('Connected and up to date', true);
+      if (!cloudSession || syncBusy || document.activeElement?.isContentEditable) return;
+      if (!navigator.onLine) return setSyncStatus('Offline · local edits preserved');
+      syncBusy = true;
+      const userId = cloudSession.user.id;
+      try {
+        const owner = localStorage.getItem('work-log-owner');
+        if (owner && owner !== userId) throw new Error('Different account: use a separate browser profile to protect these logs.');
+        localStorage.setItem('work-log-owner', userId);
+        const baselineKey = 'work-log-baseline-' + userId;
+        const captured = JSON.stringify(data);
+        const baseline = localStorage.getItem(baselineKey);
+        const { data: row, error } = await cloud.from('work_log_snapshots').select('data,updated_at').eq('user_id', userId).maybeSingle();
+        if (error) throw error;
+        const remote = JSON.stringify(row?.data || {});
+        const canonical = value => {
+          const normalize = item => Array.isArray(item) ? item.map(normalize) : item && typeof item === 'object' ? Object.fromEntries(Object.keys(item).sort().map(key => [key, normalize(item[key])])) : item;
+          return JSON.stringify(normalize(JSON.parse(value)));
+        };
+        const equal = (left, right) => left !== null && right !== null && canonical(left) === canonical(right);
+        const localChanged = baseline === null ? !equal(captured, JSON.stringify(initialData)) : !equal(captured, baseline);
+        const remoteChanged = row && !equal(remote, baseline);
+        if (localChanged && remoteChanged && !equal(captured, remote)) {
+          throw new Error('Both devices have changes. Sync paused; both copies are safe. Export this device before resolving.');
+        }
+        let accepted = remote;
+        if (!row || (localChanged && !equal(captured, remote))) {
+          const payload = { user_id: userId, data: JSON.parse(captured), updated_at: new Date().toISOString() };
+          const operation = row ? cloud.from('work_log_snapshots').update(payload).eq('user_id', userId).eq('updated_at', row.updated_at) : cloud.from('work_log_snapshots').insert(payload);
+          const result = await operation.select('updated_at');
+          if (result.error) throw result.error;
+          if (!result.data?.length) throw new Error('Another device changed the log. Retrying shortly.');
+          accepted = captured;
+        }
+        if (cloudSession?.user.id !== userId) return;
+        if (JSON.stringify(data) !== captured) {
+          if (accepted !== captured) throw new Error('Local edits arrived while syncing. Retrying safely.');
+          localStorage.setItem(baselineKey, accepted);
+          return;
+        }
+        localStorage.setItem(baselineKey, accepted);
+        data = JSON.parse(accepted);
+        save(false);
+        if (!document.activeElement?.isContentEditable) render();
+        setSyncStatus('Synced · checks every 15 seconds', true);
+      } catch (error) {
+        setSyncStatus(error.message || 'Connection unavailable · local copy safe');
+      } finally { syncBusy = false; }
     }
     async function initCloud() {
       if (!cloud) return setSyncStatus('Cloud library unavailable · local mode');

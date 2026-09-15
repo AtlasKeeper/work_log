@@ -17,12 +17,13 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p backups
           curl --fail --silent --show-error \
             "$SUPABASE_URL/rest/v1/work_log_snapshots?select=user_id,data,updated_at" \
-            -H "apikey: $SUPABASE_KEY" \
-            -H "Authorization: Bearer $SUPABASE_KEY" | jq --sort-keys . > backups/latest.json
+            -H "apikey: $SUPABASE_KEY" | jq --sort-keys --exit-status 'if type == "array" then . else error("Invalid backup") end' > backups/latest.json
           cp backups/latest.json "backups/$(date -u +%F).json"
       - name: Commit only when the backup changed
         run: |
