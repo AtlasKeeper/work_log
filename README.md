@@ -13,6 +13,7 @@ The hosted version is available at <https://atlaskeeper.github.io/work_log/>. On
 - Click task text to edit it directly.
 - Tick a checkbox when the task is complete.
 - Your daily percentage, completed-task count, and weekly count update automatically.
+- Any unfinished task automatically appears on every following day until you complete it. Its original **Added** date stays visible, including when it is carried forward.
 
 Changes are saved in that browser using `localStorage`. Use **Export backup** regularly to download a JSON backup. Use **Import** to restore it in another browser or computer.
 

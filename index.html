@@ -67,6 +67,8 @@
     .check:checked::after { content: "✓"; color: white; font-size: 14px; font-weight: 900; }
     .task-name { font-weight: 750; outline: 0; min-height: 24px; }
     .task-note { color: var(--muted); font-size: 13px; margin-top: 4px; outline: 0; min-height: 20px; }
+    .task-meta { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; padding: 3px 8px; border-radius: 999px; color: var(--green); background: rgba(31,107,76,.08); font-size: 11px; font-weight: 750; }
+    .task-meta.carried { color: #885f18; background: rgba(255,202,105,.25); }
     [contenteditable]:focus { border-radius: 5px; box-shadow: 0 0 0 3px rgba(200,236,121,.55); }
     .delete { border: 0; background: transparent; color: #9c6a61; border-radius: 8px; padding: 2px 7px; font-size: 18px; }
     .delete:hover { background: rgba(245,138,120,.16); }
@@ -171,13 +173,29 @@
 
     function iso(date) { const d = new Date(date); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
     function fromIso(value) { const [y,m,d] = value.split('-').map(Number); return new Date(y,m-1,d); }
-    function tasksFor(date = selected) { return data[date] || []; }
+    function sourceTasks(date = selected) { return data[date] || []; }
+    function taskById(id) {
+      for (const [origin, tasks] of Object.entries(data)) {
+        const task = tasks.find(item => item.id === id);
+        if (task) return { task, origin };
+      }
+    }
+    function completedOn(task, origin) { return task.completedAt || (task.done ? origin : null); }
+    function isDoneBy(task, origin, date) { const completion = completedOn(task, origin); return Boolean(completion && completion <= date); }
+    function tasksFor(date = selected) {
+      return Object.entries(data).flatMap(([origin, tasks]) => tasks
+        .filter(task => origin <= date && (!completedOn(task, origin) || completedOn(task, origin) >= date))
+        .map(task => ({ ...task, origin, displayDone: isDoneBy(task, origin, date) }))
+      ).sort((a, b) => a.origin.localeCompare(b.origin));
+    }
     function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); const toast = document.querySelector('#saved'); toast.classList.add('show'); clearTimeout(save.timer); save.timer = setTimeout(() => toast.classList.remove('show'), 900); renderStats(); }
     function escapeHtml(value) { const el = document.createElement('div'); el.textContent = value; return el.innerHTML; }
     function taskHtml(task) {
-      return `<article class="task ${task.done ? 'done' : ''}" data-id="${task.id}">
-        <input class="check" type="checkbox" ${task.done ? 'checked' : ''} aria-label="Mark task complete">
-        <div><div class="task-name" contenteditable="true" data-field="title">${escapeHtml(task.title)}</div><div class="task-note" contenteditable="true" data-field="note">${escapeHtml(task.note || '')}</div></div>
+      const added = fromIso(task.origin).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+      const carried = task.origin !== selected;
+      return `<article class="task ${task.displayDone ? 'done' : ''}" data-id="${task.id}">
+        <input class="check" type="checkbox" ${task.displayDone ? 'checked' : ''} aria-label="Mark task complete">
+        <div><div class="task-name" contenteditable="true" data-field="title">${escapeHtml(task.title)}</div><div class="task-note" contenteditable="true" data-field="note">${escapeHtml(task.note || '')}</div><span class="task-meta ${carried ? 'carried' : ''}">${carried ? '↻ Carried forward · ' : '＋ Added '}${added}</span></div>
         <button class="delete" aria-label="Delete task">×</button></article>`;
     }
     function render() {
@@ -193,20 +211,20 @@
       renderStats(); renderWeek();
     }
     function renderStats() {
-      const tasks = tasksFor(); const done = tasks.filter(t => t.done).length; const pct = tasks.length ? Math.round(done/tasks.length*100) : 0;
+      const tasks = tasksFor(); const done = tasks.filter(t => t.displayDone).length; const pct = tasks.length ? Math.round(done/tasks.length*100) : 0;
       document.querySelector('#dayDone').textContent = `${done}/${tasks.length}`;
       document.querySelector('#todayCount').textContent = done;
       document.querySelector('#percent').textContent = `${pct}%`;
       document.querySelector('#ring').style.setProperty('--progress', `${pct * 3.6}deg`);
       const start = startOfWeek(fromIso(selected)); let weekDone = 0;
-      for (let i=0; i<7; i++) { const d = new Date(start); d.setDate(d.getDate()+i); weekDone += tasksFor(iso(d)).filter(t => t.done).length; }
+      for (let i=0; i<7; i++) { const d = new Date(start); d.setDate(d.getDate()+i); const key = iso(d); weekDone += Object.entries(data).flatMap(([origin,tasks]) => tasks.map(task => ({task,origin}))).filter(item => completedOn(item.task,item.origin) === key).length; }
       document.querySelector('#weekCount').textContent = weekDone;
     }
     function startOfWeek(date) { const d = new Date(date); const day = d.getDay() || 7; d.setDate(d.getDate()-day+1); return d; }
     function renderWeek() {
       const start = startOfWeek(fromIso(selected));
       document.querySelector('#weekDays').innerHTML = Array.from({length:7}, (_, i) => {
-        const date = new Date(start); date.setDate(date.getDate()+i); const key = iso(date); const tasks = tasksFor(key); const done = tasks.filter(t => t.done).length;
+        const date = new Date(start); date.setDate(date.getDate()+i); const key = iso(date); const tasks = tasksFor(key); const done = tasks.filter(t => t.displayDone).length;
         const state = tasks.length && done === tasks.length ? 'all' : done ? 'some' : '';
         return `<div class="week-day"><button class="week-dot ${state} ${key === selected ? 'selected' : ''}" data-date="${key}" title="${done} of ${tasks.length} done">${date.getDate()}</button>${date.toLocaleDateString(undefined,{weekday:'narrow'})}</div>`;
       }).join('');
@@ -220,13 +238,13 @@
     document.addEventListener('click', event => {
       const add = event.target.closest('[data-add]'); if (add) addTask(add.dataset.add);
       const day = event.target.closest('[data-date]'); if (day) { selected = day.dataset.date; render(); }
-      const del = event.target.closest('.delete'); if (del) { const id = del.closest('.task').dataset.id; data[selected] = tasksFor().filter(t => t.id !== id); save(); render(); }
+      const del = event.target.closest('.delete'); if (del) { const found = taskById(del.closest('.task').dataset.id); if (found) data[found.origin] = sourceTasks(found.origin).filter(t => t.id !== found.task.id); save(); render(); }
     });
     document.addEventListener('change', event => {
-      if (event.target.matches('.check')) { const task = tasksFor().find(t => t.id === event.target.closest('.task').dataset.id); task.done = event.target.checked; save(); render(); }
+      if (event.target.matches('.check')) { const found = taskById(event.target.closest('.task').dataset.id); if (!found) return; found.task.done = event.target.checked; found.task.completedAt = event.target.checked ? selected : null; save(); render(); }
     });
     document.addEventListener('input', event => {
-      if (event.target.matches('[contenteditable]')) { const task = tasksFor().find(t => t.id === event.target.closest('.task').dataset.id); task[event.target.dataset.field] = event.target.textContent.trim(); save(); }
+      if (event.target.matches('[contenteditable]')) { const found = taskById(event.target.closest('.task').dataset.id); if (!found) return; found.task[event.target.dataset.field] = event.target.textContent.trim(); save(); }
     });
     function moveDay(amount) { const d = fromIso(selected); d.setDate(d.getDate()+amount); selected = iso(d); render(); }
     document.querySelector('#previousDay').onclick = () => moveDay(-1);

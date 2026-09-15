@@ -1,4 +1,4 @@
-const CACHE = 'daily-work-log-v1';
+const CACHE = 'daily-work-log-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
