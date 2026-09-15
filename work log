@@ -1,0 +1,13 @@
+sep 15 2026:
+-1 SENSEX VIX IC "no backtest source" investigation
+Traced through a blank-Entry_Date red herring, then found the real cause — a 59-vs-79-field header/row mismatch in the SENSEX backtest CSV that was silently shifting every column. Resolved once the source file was re-exported correctly (no code fix needed).
+-2 Prev Half (pd_nf/pd_sx) after-slippage fix
+Their primary bt_pnl was using before-slippage prices, unlike every other family. Restructured load_pd_half_backtest_data() to prefer after-slippage prices for the primary figure, with the "before-cost" side of the Z-pair rebuilt independently so the alias bug couldn't recreate itself.
+3- VIX IC window-mismatch fix — two rounds
+
+First pass: added a strike+date+DTE fallback match key in strategies/vix_iron_condor.py for when a live tag's window disagreed with the backtest's real-time-derived window (your sxw2r2d4 case).
+You then gave the real root cause: SENSEX has its own window boundaries, genuinely different from NIFTY's (W1 ends 11:14, not 11:30). Made window classification index-aware end-to-end — data_loader.py (SENSEX_TIME_WINDOWS, _time_windows_for_index), strategies/vix_iron_condor.py, and dashboard.py's separate "Full outer join" VIX IC table (which turned out to be a second, independent code path from the same bug). Your sxw2r2d4 case now matches via the primary key on both paths, no fallback needed.
+4- Live Qty / BT Qty columns
+Added to the VIX IC outer-join table and its per-leg display — it previously showed PnL and a text "Qty Basis" description but no actual quantity numbers.
+5- The Live PnL bug you caught ("is this right? should be -86K")
+Found a real SENSEX condor (sxw3r1d4) stuck at NaN because a partially-closed leg (20 of 160 lots) couldn't auto-settle at expiry — the ITM/OTM safety check used a NIFTY-only, stale spot source, and separately let an unrelated already-closed leg's moneyness block an unrelated leg's settlement. Fixed with an index-aware, current daily-spot source (_index_daily_spot) and a narrower check. SENSEX total is now -86,063.80, matching your estimate. Also fixed the same bug for a NIFTY case (vi_w3_r5_d4).
