@@ -19,4 +19,15 @@ Changes are saved in that browser using `localStorage`. Use **Export backup** re
 
 The included service worker makes the installed app available offline after its first successful load.
 
+## Automatic device sync
+
+The app keeps a local offline copy and uses Supabase to synchronize it. Sign in from the **Device sync** card with the same email on Linux and Android. A sign-in link is emailed to you; no password is stored by this app.
+
+Before the first sign-in:
+
+1. Open the Supabase project's **SQL Editor** and run `supabase-setup.sql` once.
+2. In **Authentication → URL Configuration**, set the Site URL to `https://atlaskeeper.github.io/work_log/` and add the same address to Redirect URLs.
+
+The `Back up cloud work logs` GitHub Action exports portable JSON snapshots every six hours. Supabase remains the sync layer—not the only copy of the data.
+
 The original September 15, 2026 entries are preloaded as completed tasks. The original `work log` text file is kept unchanged as a source record.

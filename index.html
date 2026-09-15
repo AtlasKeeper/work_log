@@ -94,6 +94,15 @@
     .week-dot.all { background: var(--lime); }
     .week-dot.selected { outline: 2px solid var(--green); outline-offset: 2px; }
     .tools { padding: 18px 22px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .sync { padding: 20px 22px; }
+    .sync h3 { font: 700 19px Georgia, serif; margin-bottom: 7px; }
+    .sync-status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+    .sync-dot.online { background: var(--lime); box-shadow: 0 0 0 4px rgba(200,236,121,.2); }
+    .sync-form { display: grid; gap: 8px; }
+    .sync-form input { width: 100%; padding: 10px 12px; color: var(--ink); border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.7); }
+    .sync-form button { border: 0; border-radius: 11px; padding: 10px 12px; color: white; background: var(--green); font-weight: 750; }
+    .sync-help { color: var(--muted); font-size: 11px; margin: 10px 0 0; }
     .tool-btn { flex: 1; min-width: 90px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 11px; padding: 8px; font-size: 12px; font-weight: 700; }
     .tool-btn:hover { color: var(--green); border-color: rgba(31,107,76,.3); }
     #importFile { display: none; }
@@ -146,6 +155,16 @@
           </div>
         </section>
         <section class="card week"><h3>This week</h3><div class="week-days" id="weekDays"></div></section>
+        <section class="card sync">
+          <h3>Device sync</h3>
+          <div class="sync-status"><span class="sync-dot" id="syncDot"></span><span id="syncStatus">Checking connection…</span></div>
+          <div class="sync-form" id="syncForm">
+            <input type="email" id="syncEmail" autocomplete="email" placeholder="Your email address" aria-label="Email address">
+            <button id="syncLogin">Email me a sign-in link</button>
+          </div>
+          <button class="tool-btn" id="syncLogout" hidden>Disconnect this device</button>
+          <p class="sync-help" id="syncHelp">Use the same email on Linux and Android. Local copies remain available offline.</p>
+        </section>
         <section class="card tools">
           <button class="tool-btn" id="exportData">Export backup</button>
           <button class="tool-btn" id="importData">Import</button>
@@ -156,8 +175,15 @@
   </main>
   <div class="saved" id="saved">Saved ✓</div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const STORAGE_KEY = 'daily-work-log-v1';
+    const SUPABASE_URL = 'https://xbhctayaizmthhnczkrq.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable__0edDsL2VlJ6_M4hsBuEFQ_IujwaWBb';
+    const cloud = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let cloudSession = null;
+    let cloudSaveTimer = null;
+    let lastCloudUpdate = null;
     const initialData = {
       '2026-09-15': [
         { id: 'seed-1', type: 'big', done: true, title: 'Fix the live PnL bug', note: 'Found the SENSEX condor settlement issue and corrected the index-aware daily spot check.' },
@@ -188,7 +214,44 @@
         .map(task => ({ ...task, origin, displayDone: isDoneBy(task, origin, date) }))
       ).sort((a, b) => a.origin.localeCompare(b.origin));
     }
-    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); const toast = document.querySelector('#saved'); toast.classList.add('show'); clearTimeout(save.timer); save.timer = setTimeout(() => toast.classList.remove('show'), 900); renderStats(); }
+    function save(sync = true) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); const toast = document.querySelector('#saved'); toast.textContent = cloudSession && sync ? 'Saved · syncing…' : 'Saved ✓'; toast.classList.add('show'); clearTimeout(save.timer); save.timer = setTimeout(() => toast.classList.remove('show'), 900); renderStats(); if (sync && cloudSession) { clearTimeout(cloudSaveTimer); cloudSaveTimer = setTimeout(pushCloud, 1200); } }
+    function setSyncStatus(message, online = false) { document.querySelector('#syncStatus').textContent = message; document.querySelector('#syncDot').classList.toggle('online', online); }
+    function showSession(session) {
+      cloudSession = session;
+      document.querySelector('#syncForm').hidden = Boolean(session);
+      document.querySelector('#syncLogout').hidden = !session;
+      document.querySelector('#syncHelp').textContent = session ? `Connected as ${session.user.email}. Changes sync automatically.` : 'Use the same email on Linux and Android. Local copies remain available offline.';
+      setSyncStatus(session ? 'Connected and up to date' : 'Stored on this device only', Boolean(session));
+    }
+    async function pushCloud() {
+      if (!cloudSession || !navigator.onLine) return setSyncStatus('Offline · will sync when connected');
+      setSyncStatus('Syncing…', true);
+      const updatedAt = new Date().toISOString();
+      const { error } = await cloud.from('work_log_snapshots').upsert({ user_id: cloudSession.user.id, data, updated_at: updatedAt });
+      if (error) return setSyncStatus(`Sync needs setup: ${error.message}`);
+      lastCloudUpdate = updatedAt;
+      setSyncStatus('Connected and up to date', true);
+    }
+    async function pullCloud(firstLoad = false) {
+      if (!cloudSession || !navigator.onLine) return;
+      const { data: row, error } = await cloud.from('work_log_snapshots').select('data,updated_at').eq('user_id', cloudSession.user.id).maybeSingle();
+      if (error) return setSyncStatus(`Sync needs setup: ${error.message}`);
+      if (!row) return pushCloud();
+      if (firstLoad || !lastCloudUpdate || row.updated_at > lastCloudUpdate) {
+        data = row.data || {};
+        lastCloudUpdate = row.updated_at;
+        save(false); render();
+      }
+      setSyncStatus('Connected and up to date', true);
+    }
+    async function initCloud() {
+      if (!cloud) return setSyncStatus('Cloud library unavailable · local mode');
+      const { data: { session } } = await cloud.auth.getSession();
+      showSession(session);
+      if (session) await pullCloud(true);
+      cloud.auth.onAuthStateChange((_event, nextSession) => { showSession(nextSession); if (nextSession) setTimeout(() => pullCloud(true), 0); });
+      setInterval(() => { if (cloudSession && document.visibilityState === 'visible') pullCloud(); }, 15000);
+    }
     function escapeHtml(value) { const el = document.createElement('div'); el.textContent = value; return el.innerHTML; }
     function taskHtml(task) {
       const added = fromIso(task.origin).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -254,8 +317,18 @@
     document.querySelector('#exportData').onclick = () => { const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`work-log-${iso(new Date())}.json`; a.click(); URL.revokeObjectURL(a.href); };
     document.querySelector('#importData').onclick = () => document.querySelector('#importFile').click();
     document.querySelector('#importFile').onchange = async event => { const file=event.target.files[0]; if (!file) return; try { const parsed=JSON.parse(await file.text()); if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error(); data=parsed; save(); render(); } catch { alert('That file is not a valid work-log backup.'); } event.target.value=''; };
+    document.querySelector('#syncLogin').onclick = async () => {
+      const email = document.querySelector('#syncEmail').value.trim();
+      if (!email) return document.querySelector('#syncEmail').focus();
+      setSyncStatus('Sending sign-in email…');
+      const { error } = await cloud.auth.signInWithOtp({ email, options: { emailRedirectTo: 'https://atlaskeeper.github.io/work_log/' } });
+      setSyncStatus(error ? error.message : 'Check your email and open the sign-in link');
+    };
+    document.querySelector('#syncLogout').onclick = async () => { await cloud.auth.signOut(); showSession(null); };
+    window.addEventListener('online', () => { if (cloudSession) pullCloud(); });
+    window.addEventListener('focus', () => { if (cloudSession) pullCloud(); });
     if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js'));
-    render();
+    render(); initCloud();
   </script>
 </body>
 </html>
