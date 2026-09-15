@@ -1,0 +1,18 @@
+{
+  "name": "Daily Work Log",
+  "short_name": "Work Log",
+  "description": "One meaningful win and the little steps around it.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f3e8",
+  "theme_color": "#10261d",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

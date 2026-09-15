@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10261d">
+  <meta name="description" content="A simple daily work log for one main win and the little tasks around it.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>Daily Work Log</title>
+  <style>
+    :root {
+      --ink: #183126;
+      --muted: #6a7b71;
+      --paper: #f7f3e8;
+      --card: rgba(255,255,255,.78);
+      --line: rgba(24,49,38,.12);
+      --green: #1f6b4c;
+      --green-dark: #10261d;
+      --lime: #c8ec79;
+      --amber: #ffca69;
+      --coral: #f58a78;
+      --shadow: 0 18px 50px rgba(30,54,42,.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--ink);
+      font: 500 16px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 8% 8%, rgba(200,236,121,.52), transparent 24rem),
+        radial-gradient(circle at 92% 88%, rgba(245,138,120,.22), transparent 27rem), var(--paper);
+    }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(1120px, calc(100% - 32px)); margin: auto; padding: 38px 0 56px; }
+    header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 28px; }
+    .eyebrow { color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: .17em; text-transform: uppercase; }
+    h1 { font: 800 clamp(36px, 6vw, 68px)/.98 Georgia, serif; letter-spacing: -.04em; margin: 8px 0; }
+    .subhead { color: var(--muted); margin: 0; }
+    .date-nav { display: flex; align-items: center; gap: 8px; padding: 7px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); box-shadow: var(--shadow); }
+    .icon-btn, .today-btn { border: 0; color: var(--ink); background: transparent; border-radius: 10px; padding: 9px 12px; font-weight: 750; }
+    .icon-btn:hover, .today-btn:hover { background: rgba(31,107,76,.09); }
+    #datePicker { width: 42px; height: 38px; padding: 6px; border: 0; border-radius: 10px; background: rgba(31,107,76,.08); color: var(--green); }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; align-items: start; }
+    .card { border: 1px solid var(--line); border-radius: 24px; background: var(--card); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
+    .day-card { overflow: hidden; }
+    .day-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 24px 26px; border-bottom: 1px solid var(--line); }
+    h2, h3, p { margin-top: 0; }
+    h2 { font: 750 25px/1.2 Georgia, serif; margin-bottom: 4px; }
+    .date-label { color: var(--muted); font-size: 14px; }
+    .day-score { min-width: 74px; padding: 10px 14px; border-radius: 15px; color: white; text-align: center; background: var(--green); }
+    .day-score strong { display: block; font-size: 24px; line-height: 1; }
+    .day-score span { font-size: 11px; opacity: .75; text-transform: uppercase; letter-spacing: .08em; }
+    .section { padding: 24px 26px; }
+    .section + .section { border-top: 1px solid var(--line); }
+    .section-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 15px; }
+    .section-title h3 { margin: 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; }
+    .main-title::before { content: "◆"; color: var(--amber); margin-right: 8px; }
+    .little-title::before { content: "●"; color: var(--coral); margin-right: 8px; }
+    .task { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: 15px; background: rgba(255,255,255,.55); }
+    .task + .task { margin-top: 10px; }
+    .task.done { opacity: .58; }
+    .task.done .task-name { text-decoration: line-through; }
+    .check { appearance: none; width: 22px; height: 22px; margin: 2px 0 0; border: 2px solid rgba(31,107,76,.42); border-radius: 7px; display: grid; place-content: center; }
+    .check:checked { background: var(--green); border-color: var(--green); }
+    .check:checked::after { content: "✓"; color: white; font-size: 14px; font-weight: 900; }
+    .task-name { font-weight: 750; outline: 0; min-height: 24px; }
+    .task-note { color: var(--muted); font-size: 13px; margin-top: 4px; outline: 0; min-height: 20px; }
+    [contenteditable]:focus { border-radius: 5px; box-shadow: 0 0 0 3px rgba(200,236,121,.55); }
+    .delete { border: 0; background: transparent; color: #9c6a61; border-radius: 8px; padding: 2px 7px; font-size: 18px; }
+    .delete:hover { background: rgba(245,138,120,.16); }
+    .add-btn { border: 1px dashed rgba(31,107,76,.35); border-radius: 12px; padding: 9px 12px; color: var(--green); background: rgba(31,107,76,.05); font-weight: 750; }
+    .add-btn:hover { background: rgba(31,107,76,.1); }
+    .sidebar { display: grid; gap: 18px; }
+    .stats { padding: 22px; background: var(--green-dark); color: white; }
+    .stats h3, .week h3 { font: 700 19px Georgia, serif; margin-bottom: 18px; }
+    .ring { --progress: 0deg; width: 142px; aspect-ratio: 1; border-radius: 50%; margin: 4px auto 22px; display: grid; place-items: center; background: conic-gradient(var(--lime) var(--progress), rgba(255,255,255,.12) 0); position: relative; }
+    .ring::before { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: var(--green-dark); }
+    .ring-label { position: relative; text-align: center; }
+    .ring-label strong { display: block; font-size: 33px; line-height: 1; }
+    .ring-label span { color: rgba(255,255,255,.62); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
+    .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .stat { padding: 12px; border-radius: 13px; background: rgba(255,255,255,.07); }
+    .stat strong { display: block; color: var(--lime); font-size: 22px; }
+    .stat span { color: rgba(255,255,255,.6); font-size: 12px; }
+    .week { padding: 22px; }
+    .week-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .week-day { text-align: center; font-size: 11px; color: var(--muted); }
+    .week-dot { aspect-ratio: 1; border-radius: 9px; margin-bottom: 5px; display: grid; place-items: center; font-weight: 800; color: var(--ink); background: rgba(31,107,76,.07); }
+    .week-dot.some { background: var(--amber); }
+    .week-dot.all { background: var(--lime); }
+    .week-dot.selected { outline: 2px solid var(--green); outline-offset: 2px; }
+    .tools { padding: 18px 22px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .tool-btn { flex: 1; min-width: 90px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 11px; padding: 8px; font-size: 12px; font-weight: 700; }
+    .tool-btn:hover { color: var(--green); border-color: rgba(31,107,76,.3); }
+    #importFile { display: none; }
+    .empty { color: var(--muted); padding: 18px; border: 1px dashed var(--line); border-radius: 14px; text-align: center; }
+    .saved { position: fixed; right: 22px; bottom: 22px; color: white; background: var(--green); padding: 10px 15px; border-radius: 12px; box-shadow: var(--shadow); opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; }
+    .saved.show { opacity: 1; transform: translateY(0); }
+    @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } .date-nav { width: 100%; justify-content: space-between; } }
+    @media (max-width: 480px) { .shell { width: min(100% - 20px, 1120px); padding-top: 22px; } .section, .day-head { padding: 20px 17px; } h1 { font-size: 43px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <div class="eyebrow">Your daily momentum</div>
+        <h1>Work log.</h1>
+        <p class="subhead">One meaningful win. A few little steps. Every day.</p>
+      </div>
+      <div class="date-nav" aria-label="Choose a day">
+        <button class="icon-btn" id="previousDay" aria-label="Previous day">←</button>
+        <button class="today-btn" id="today">Today</button>
+        <input type="date" id="datePicker" aria-label="Pick a date">
+        <button class="icon-btn" id="nextDay" aria-label="Next day">→</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <section class="card day-card">
+        <div class="day-head">
+          <div><h2 id="friendlyDate"></h2><div class="date-label" id="fullDate"></div></div>
+          <div class="day-score"><strong id="dayDone">0/0</strong><span>finished</span></div>
+        </div>
+        <div class="section">
+          <div class="section-title"><h3 class="main-title">The main win</h3><button class="add-btn" data-add="big">+ Add</button></div>
+          <div id="bigTasks"></div>
+        </div>
+        <div class="section">
+          <div class="section-title"><h3 class="little-title">Little tasks</h3><button class="add-btn" data-add="small">+ Add task</button></div>
+          <div id="smallTasks"></div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="card stats">
+          <h3>At a glance</h3>
+          <div class="ring" id="ring"><div class="ring-label"><strong id="percent">0%</strong><span>complete</span></div></div>
+          <div class="stat-row">
+            <div class="stat"><strong id="todayCount">0</strong><span>done this day</span></div>
+            <div class="stat"><strong id="weekCount">0</strong><span>done this week</span></div>
+          </div>
+        </section>
+        <section class="card week"><h3>This week</h3><div class="week-days" id="weekDays"></div></section>
+        <section class="card tools">
+          <button class="tool-btn" id="exportData">Export backup</button>
+          <button class="tool-btn" id="importData">Import</button>
+          <input type="file" id="importFile" accept="application/json">
+        </section>
+      </aside>
+    </div>
+  </main>
+  <div class="saved" id="saved">Saved ✓</div>
+
+  <script>
+    const STORAGE_KEY = 'daily-work-log-v1';
+    const initialData = {
+      '2026-09-15': [
+        { id: 'seed-1', type: 'big', done: true, title: 'Fix the live PnL bug', note: 'Found the SENSEX condor settlement issue and corrected the index-aware daily spot check.' },
+        { id: 'seed-2', type: 'small', done: true, title: 'Investigate SENSEX VIX IC “no backtest source”', note: 'Found a 59-vs-79-field CSV header/row mismatch; source was re-exported correctly.' },
+        { id: 'seed-3', type: 'small', done: true, title: 'Fix Prev Half after-slippage prices', note: 'Updated primary bt_pnl and independently rebuilt the before-cost pair.' },
+        { id: 'seed-4', type: 'small', done: true, title: 'Make VIX IC windows index-aware', note: 'Added SENSEX-specific window boundaries across loader, strategy, and dashboard paths.' },
+        { id: 'seed-5', type: 'small', done: true, title: 'Add Live Qty / BT Qty columns', note: 'Added actual quantities to the outer-join and per-leg displays.' }
+      ]
+    };
+    let data;
+    try { data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || initialData; } catch { data = initialData; }
+    let selected = iso(new Date());
+
+    function iso(date) { const d = new Date(date); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+    function fromIso(value) { const [y,m,d] = value.split('-').map(Number); return new Date(y,m-1,d); }
+    function tasksFor(date = selected) { return data[date] || []; }
+    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); const toast = document.querySelector('#saved'); toast.classList.add('show'); clearTimeout(save.timer); save.timer = setTimeout(() => toast.classList.remove('show'), 900); renderStats(); }
+    function escapeHtml(value) { const el = document.createElement('div'); el.textContent = value; return el.innerHTML; }
+    function taskHtml(task) {
+      return `<article class="task ${task.done ? 'done' : ''}" data-id="${task.id}">
+        <input class="check" type="checkbox" ${task.done ? 'checked' : ''} aria-label="Mark task complete">
+        <div><div class="task-name" contenteditable="true" data-field="title">${escapeHtml(task.title)}</div><div class="task-note" contenteditable="true" data-field="note">${escapeHtml(task.note || '')}</div></div>
+        <button class="delete" aria-label="Delete task">×</button></article>`;
+    }
+    function render() {
+      const date = fromIso(selected);
+      document.querySelector('#datePicker').value = selected;
+      document.querySelector('#friendlyDate').textContent = selected === iso(new Date()) ? 'Today' : date.toLocaleDateString(undefined, { weekday: 'long' });
+      document.querySelector('#fullDate').textContent = date.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+      ['big','small'].forEach(type => {
+        const holder = document.querySelector(type === 'big' ? '#bigTasks' : '#smallTasks');
+        const tasks = tasksFor().filter(task => task.type === type);
+        holder.innerHTML = tasks.length ? tasks.map(taskHtml).join('') : `<div class="empty">${type === 'big' ? 'What would make today feel meaningful?' : 'Add the small steps that move things forward.'}</div>`;
+      });
+      renderStats(); renderWeek();
+    }
+    function renderStats() {
+      const tasks = tasksFor(); const done = tasks.filter(t => t.done).length; const pct = tasks.length ? Math.round(done/tasks.length*100) : 0;
+      document.querySelector('#dayDone').textContent = `${done}/${tasks.length}`;
+      document.querySelector('#todayCount').textContent = done;
+      document.querySelector('#percent').textContent = `${pct}%`;
+      document.querySelector('#ring').style.setProperty('--progress', `${pct * 3.6}deg`);
+      const start = startOfWeek(fromIso(selected)); let weekDone = 0;
+      for (let i=0; i<7; i++) { const d = new Date(start); d.setDate(d.getDate()+i); weekDone += tasksFor(iso(d)).filter(t => t.done).length; }
+      document.querySelector('#weekCount').textContent = weekDone;
+    }
+    function startOfWeek(date) { const d = new Date(date); const day = d.getDay() || 7; d.setDate(d.getDate()-day+1); return d; }
+    function renderWeek() {
+      const start = startOfWeek(fromIso(selected));
+      document.querySelector('#weekDays').innerHTML = Array.from({length:7}, (_, i) => {
+        const date = new Date(start); date.setDate(date.getDate()+i); const key = iso(date); const tasks = tasksFor(key); const done = tasks.filter(t => t.done).length;
+        const state = tasks.length && done === tasks.length ? 'all' : done ? 'some' : '';
+        return `<div class="week-day"><button class="week-dot ${state} ${key === selected ? 'selected' : ''}" data-date="${key}" title="${done} of ${tasks.length} done">${date.getDate()}</button>${date.toLocaleDateString(undefined,{weekday:'narrow'})}</div>`;
+      }).join('');
+    }
+    function addTask(type) {
+      data[selected] ||= [];
+      data[selected].push({ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, type, done: false, title: type === 'big' ? 'Name your main win' : 'New task', note: '' });
+      save(); render();
+      const names = document.querySelectorAll(`#${type === 'big' ? 'bigTasks' : 'smallTasks'} .task-name`); const last = names[names.length-1]; last.focus(); document.execCommand('selectAll', false, null);
+    }
+    document.addEventListener('click', event => {
+      const add = event.target.closest('[data-add]'); if (add) addTask(add.dataset.add);
+      const day = event.target.closest('[data-date]'); if (day) { selected = day.dataset.date; render(); }
+      const del = event.target.closest('.delete'); if (del) { const id = del.closest('.task').dataset.id; data[selected] = tasksFor().filter(t => t.id !== id); save(); render(); }
+    });
+    document.addEventListener('change', event => {
+      if (event.target.matches('.check')) { const task = tasksFor().find(t => t.id === event.target.closest('.task').dataset.id); task.done = event.target.checked; save(); render(); }
+    });
+    document.addEventListener('input', event => {
+      if (event.target.matches('[contenteditable]')) { const task = tasksFor().find(t => t.id === event.target.closest('.task').dataset.id); task[event.target.dataset.field] = event.target.textContent.trim(); save(); }
+    });
+    function moveDay(amount) { const d = fromIso(selected); d.setDate(d.getDate()+amount); selected = iso(d); render(); }
+    document.querySelector('#previousDay').onclick = () => moveDay(-1);
+    document.querySelector('#nextDay').onclick = () => moveDay(1);
+    document.querySelector('#today').onclick = () => { selected = iso(new Date()); render(); };
+    document.querySelector('#datePicker').onchange = event => { if (event.target.value) { selected = event.target.value; render(); } };
+    document.querySelector('#exportData').onclick = () => { const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`work-log-${iso(new Date())}.json`; a.click(); URL.revokeObjectURL(a.href); };
+    document.querySelector('#importData').onclick = () => document.querySelector('#importFile').click();
+    document.querySelector('#importFile').onchange = async event => { const file=event.target.files[0]; if (!file) return; try { const parsed=JSON.parse(await file.text()); if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error(); data=parsed; save(); render(); } catch { alert('That file is not a valid work-log backup.'); } event.target.value=''; };
+    if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js'));
+    render();
+  </script>
+</body>
+</html>
